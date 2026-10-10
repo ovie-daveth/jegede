@@ -1,2 +1,39 @@
-import {bindings,isAdmin} from '../../helpers';
-export async function GET(r:Request,{params}:{params:Promise<{id:string}>}){const {id}=await params;const {DB,BUCKET}=bindings();const a=await DB.prepare('SELECT assets.*,projects.published FROM assets JOIN projects ON projects.id=assets.project_id WHERE assets.id=?').bind(id).first();if(!a||(!a.published&&!isAdmin(r)))return new Response('Not found',{status:404});const obj=await BUCKET.get(String(a.key),{range:r.headers});if(!obj)return new Response('Not found',{status:404});const h=new Headers({'Content-Type':String(a.mime),'Accept-Ranges':'bytes','X-Content-Type-Options':'nosniff','Cache-Control':'private, max-age=0, must-revalidate'});if(new URL(r.url).searchParams.has('download')||a.mime==='application/octet-stream')h.set('Content-Disposition',`attachment; filename*=UTF-8''${encodeURIComponent(String(a.name))}`);let status=200;if(obj.range&&'offset' in obj.range){const offset=obj.range.offset||0,length=obj.range.length||obj.size;h.set('Content-Range',`bytes ${offset}-${offset+length-1}/${obj.size}`);h.set('Content-Length',String(length));status=206;}else h.set('Content-Length',String(obj.size));return new Response(obj.body,{status,headers:h});}
+import { database } from "../../../../lib/supabase/database";
+import { isAdmin, apiError } from "../../../../lib/auth";
+import { presignRead } from "../../../../lib/storage";
+export const dynamic = "force-dynamic";
+export async function GET(
+  r: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const { data, error } = await database()
+      .from("project_files")
+      .select("name,mime,status,storage_key,projects!inner(published)")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data || data.status !== "ready")
+      return new Response("Not found", { status: 404 });
+    const project = data.projects as unknown as { published: boolean };
+    if (!project.published && !(await isAdmin()))
+      return new Response("Not found", { status: 404 });
+    const location = await presignRead(
+      data.storage_key,
+      data.name,
+      data.mime,
+      new URL(r.url).searchParams.has("download"),
+    );
+    return new Response(null, {
+      status: 307,
+      headers: {
+        Location: location,
+        "Cache-Control": "private, no-store",
+        "Referrer-Policy": "no-referrer",
+      },
+    });
+  } catch (e) {
+    return apiError(e);
+  }
+}

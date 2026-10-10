@@ -1,4 +1,74 @@
-import {bindings,writeGuard} from '../helpers';
-const allowed=new Set(['mp4','webm','mov','m4v','avi','mkv','mp3','wav','ogg','png','jpg','jpeg','webp','gif','pdf','dwg','dxf','step','stp','stl','obj','iges','igs','sldprt','sldasm','zip','7z','doc','docx','ppt','pptx','xlsx','csv','txt']);
-export async function POST(r:Request){const denied=writeGuard(r);if(denied)return denied;const url=new URL(r.url);const project=url.searchParams.get('project');const name=url.searchParams.get('name')||'file';const ext=name.split('.').pop()?.toLowerCase()||'';if(!allowed.has(ext)||name.length>250)return Response.json({error:'Unsupported file format. Use video, image, PDF, CAD, document or archive files.'},{status:400});const size=Number(r.headers.get('content-length'));if(!Number.isFinite(size)||size<=0||size>90*1024*1024)return Response.json({error:'Each file must be under 90 MB.'},{status:413});const {DB,BUCKET}=bindings();if(!await DB.prepare('SELECT id FROM projects WHERE id=?').bind(project).first())return Response.json({error:'Project not found.'},{status:404});if(!r.body)return Response.json({error:'File is empty.'},{status:400});const id=crypto.randomUUID(),key='work/'+id;const mime=({'mp4':'video/mp4','webm':'video/webm','mov':'video/quicktime','m4v':'video/mp4','mp3':'audio/mpeg','wav':'audio/wav','ogg':'audio/ogg','png':'image/png','jpg':'image/jpeg','jpeg':'image/jpeg','webp':'image/webp','gif':'image/gif','pdf':'application/pdf'} as Record<string,string>)[ext]||'application/octet-stream';await BUCKET.put(key,r.body,{httpMetadata:{contentType:mime}});try{await DB.prepare('INSERT INTO assets (id,project_id,name,mime,size,key) VALUES (?,?,?,?,?,?)').bind(id,project,name,mime,size,key).run();}catch(e){await BUCKET.delete(key);throw e;}return Response.json({id});}
-export async function DELETE(r:Request){const denied=writeGuard(r);if(denied)return denied;const {DB,BUCKET}=bindings();const id=new URL(r.url).searchParams.get('id');const a=await DB.prepare('SELECT key FROM assets WHERE id=?').bind(id).first();if(a){await BUCKET.delete(String(a.key));await DB.prepare('DELETE FROM assets WHERE id=?').bind(id).run();}return Response.json({ok:true});}
+import { database } from "../../../lib/supabase/database";
+import { writeGuard, apiError } from "../../../lib/auth";
+import { uploadSchema, fileMime } from "../../../lib/validation";
+import { presignUpload, deleteObject } from "../../../lib/storage";
+export async function POST(r: Request) {
+  try {
+    const guard = await writeGuard(r);
+    if (guard) return guard;
+    const parsed = uploadSchema.safeParse(await r.json().catch(() => null));
+    if (!parsed.success)
+      return Response.json(
+        {
+          error:
+            "Use a supported video, image, PDF, CAD, document or archive file under 250 MB.",
+        },
+        { status: 400 },
+      );
+    const b = parsed.data,
+      db = database();
+    const p = await db
+      .from("projects")
+      .select("id")
+      .eq("id", b.projectId)
+      .maybeSingle();
+    if (p.error) throw p.error;
+    if (!p.data)
+      return Response.json({ error: "Project not found." }, { status: 404 });
+    const id = crypto.randomUUID(),
+      key = `projects/${b.projectId}/${id}`,
+      mime = fileMime(b.name);
+    const url = await presignUpload(key, mime, b.size);
+    const inserted = await db
+      .from("project_files")
+      .insert({
+        id,
+        project_id: b.projectId,
+        name: b.name,
+        mime,
+        size: b.size,
+        storage_key: key,
+        status: "pending",
+      });
+    if (inserted.error) throw inserted.error;
+    return Response.json(
+      { id, url, mime },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (e) {
+    return apiError(e);
+  }
+}
+export async function DELETE(r: Request) {
+  try {
+    const guard = await writeGuard(r);
+    if (guard) return guard;
+    const id = new URL(r.url).searchParams.get("id");
+    if (!id) return Response.json({ error: "Missing file." }, { status: 400 });
+    const db = database();
+    const a = await db
+      .from("project_files")
+      .select("storage_key")
+      .eq("id", id)
+      .maybeSingle();
+    if (a.error) throw a.error;
+    if (a.data) {
+      await deleteObject(a.data.storage_key);
+      const deleted = await db.from("project_files").delete().eq("id", id);
+      if (deleted.error) throw deleted.error;
+    }
+    return Response.json({ ok: true });
+  } catch (e) {
+    return apiError(e);
+  }
+}

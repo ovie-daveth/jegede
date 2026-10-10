@@ -1,5 +1,19 @@
-import { env } from 'cloudflare:workers';
-export const bindings = () => env as unknown as {DB:D1Database;BUCKET:R2Bucket;ADMIN_EMAILS?:string};
-export function isAdmin(r:Request){const email=r.headers.get('oai-authenticated-user-email')?.toLowerCase();return !!r.headers.get('oai-authenticated-user-id') && !!email && (bindings().ADMIN_EMAILS||'michealjegede3@gmail.com').toLowerCase().split(',').map(s=>s.trim()).includes(email);}
-export function writeGuard(r:Request){if(!isAdmin(r))return Response.json({error:'Sign in with the authorised administrator account.'},{status:403});const origin=r.headers.get('origin');if(origin && origin!==new URL(r.url).origin)return Response.json({error:'Invalid request origin.'},{status:403});return null;}
-export async function listProjects(admin=false){const {DB}=bindings();const p=await DB.prepare('SELECT * FROM projects '+(admin?'':'WHERE published = 1 ')+'ORDER BY created_at DESC').all();const a=await DB.prepare('SELECT id, project_id, name, mime, size FROM assets').all();return p.results.map(x=>({...x,assets:a.results.filter(y=>y.project_id===x.id)}));}
+import { database } from "../../lib/supabase/database";
+export { isAdmin, writeGuard, apiError } from "../../lib/auth";
+export async function listProjects(admin = false) {
+  let query = database()
+    .from("projects")
+    .select(
+      "id,title,year,tools,category,description,published,created_at,project_files(id,name,mime,size,status)",
+    )
+    .order("created_at", { ascending: false });
+  if (!admin) query = query.eq("published", true);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || []).map(({ project_files, ...p }) => ({
+    ...p,
+    assets: project_files
+      .filter((a) => a.status === "ready")
+      .map(({ status, ...a }) => a),
+  }));
+}
