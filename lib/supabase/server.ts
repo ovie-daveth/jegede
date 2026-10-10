@@ -5,8 +5,8 @@ import { required } from "../config";
 export async function serverSupabase() {
   const jar = await cookies();
   return createServerClient(
-    required("NEXT_PUBLIC_SUPABASE_URL"),
-    required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+    required("SUPABASE_URL"),
+    required("SUPABASE_PUBLISHABLE_KEY"),
     {
       cookies: {
         getAll() {
