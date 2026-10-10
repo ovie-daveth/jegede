@@ -149,7 +149,7 @@ export default function Portfolio() {
           <a href="#about">About</a>
           <a href="#experience">Experience</a>
         </nav>
-        <a href="mailto:michealjegede3@gmail.com" className="navcontact">
+        <a href="https://www.linkedin.com/in/micheal-jegede-2119a9195" target="_blank" rel="noopener noreferrer" className="navcontact">
           Let’s connect <ArrowUpRight size={16} />
         </a>
       </header>

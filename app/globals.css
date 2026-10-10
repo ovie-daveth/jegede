@@ -277,31 +277,52 @@ nav a:hover,
 }
 .projectgrid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 32px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
 }
 .projectcard {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
   padding: 0;
   text-align: left;
-  background: transparent;
-  border: 0;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 12px;
   overflow: hidden;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.projectcard:hover,
+.projectcard:focus-visible {
+  border-color: #a9bdc5;
+  box-shadow: 0 12px 32px rgba(23, 43, 54, 0.07);
 }
 .cardvisual {
-  height: 300px;
+  min-width: 0;
+  min-height: 320px;
   background: #e8eeed;
   position: relative;
   overflow: hidden;
   color: #627f89;
-  border-radius: 5px;
+  border-right: 1px solid var(--line);
 }
 .cardvisual img,
 .cardvisual video {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 .cardvisual .blueprint {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
 }
 .cardnumber {
@@ -336,25 +357,42 @@ nav a:hover,
   place-items: center;
   transition: transform 0.2s;
 }
-.projectcard:hover .cardarrow {
+.projectcard:hover .cardarrow,
+.projectcard:focus-visible .cardarrow {
   transform: rotate(45deg);
 }
 .cardbody {
-  padding: 20px 1px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  padding: clamp(26px, 3.5vw, 48px);
+  overflow-wrap: anywhere;
 }
 .cardmeta {
   display: flex;
+  width: 100%;
+  gap: 16px;
   justify-content: space-between;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
-  margin-bottom: 12px;
+  margin-bottom: 18px;
+}
+.cardmeta span {
+  flex-shrink: 0;
+}
+.cardbody h3 {
+  font-size: clamp(23px, 2.2vw, 30px);
+  line-height: 1.3;
 }
 .cardbody p {
-  font-size: 13px;
+  margin: 16px 0 24px;
+  font-size: 14px;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -982,8 +1020,17 @@ textarea {
     grid-template-columns: 1fr;
     gap: 28px;
   }
+  .projectcard {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .cardvisual {
-    height: 260px;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .cardbody {
+    padding: 26px 24px;
   }
   .firstproject h3 {
     font-size: 25px;
